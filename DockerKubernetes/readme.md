@@ -20,7 +20,7 @@
 
 `-v "$(pwd):/app"` → volume: bind-mount host's current dir ⇒ image /app dir
 
-`node:12-alpine` → base image for application
+`todo-app:version` → base image for application
 
 `sh -c "yarn install && yarn run dev"` → alpine doesn't have bash, so we use the *base shell* **sh** to install all dependencies(npm install) and run the *app-start* script(npm run.exe dev). **dev** starts **nodemon**
 
@@ -118,3 +118,109 @@ or
 
     SELECT * FROM todos.todos_items;
 
+## **`Docker Compose`**
+
+Tool developed to define and share multi-container applications. **Compose** creates a **_yaml_** or _yml_ file to define the services.
+
+With a _yaml_ file, all we need is a single command to power up the app, or destroy it.
+
+**Advantages:**
+* compose defines the application stack in a single file
+* placed at the root of the project(version controlled) → allows contributions
+* use by: cloning repo → start compose app
+
+[**Install Docker Compose..**](https://docs.docker.com/compose/install/)
+
+    docker compose version
+
+### **`Create Compose file`**
+
+At the root of project, create a file named
+
+`docker-compose.yml`
+
+1. Define [schenma version](https://docs.docker.com/compose/compose-file/) → **version: "3.7"**
+
+2. Define services(containers) to run
+
+3. Run docker compose
+
+### **App Services**
+
+**Application Service**: 
+
+Define Service entry and `image` for the container. Pick any name(**`app`**) for the service, Name will become a network alias → useful for MySQL service
+
+Set the `command` to run on the image
+
+Define `ports` for the service
+
+Migrate working directory and volume mapping using `working_dir` and `volumes`
+
+Specify `environment` variables
+
+`.\docker-compose.yml` - file with contents:
+```yml
+version: "3.7"
+
+services:
+    app:
+        image: todo-list:version1.2
+        command: sh -c "yarn install & yarn run dev"
+        ports:
+            - "1234:3000"
+        working_dir: /app
+        volumes:
+            - ./:/app
+        environment:
+            MYSQL_HOST: mysql
+            MYSQL_USER: root
+            MYSQL_PASSWORD: secret
+            MYSQL_DB: todos
+```
+
+**MySQL Service:**
+
+Name of this db service should match the MYSQL_HOST environment variable of application service `app`
+
+Define **image** and **volume**. 
+
+Volumes **_do not_** get created implicitly from a yml file like they do running a `docker run --volume name:/dir image_id`
+<sub>initiates a container with specified volume from image_id</sub>
+
+Volume must be defined in top-level definition section **and** specified in the service's configuration
+
+Define **environment variables**
+
+```yml
+version: "3.7"
+
+services:
+    app:
+        image: todo-list:version1.2
+        command: sh -c "yarn install && yarn run dev"
+        ports:
+            - "1234:3000"
+        working_dir: /app
+        volumes:
+            - ./:/app
+        environment:
+            MYSQL_HOST: mysql
+            MYSQL_USER: root
+            MYSQL_PASSWORD: secret
+            MYSQL_DATABASE: todos
+    mysql:
+        image: mysql:5.7
+        volumes: 
+            - todo-mysql-data:/var/lib/mysql
+        environment:
+            MYSQL_ROOT_PASSWORD: secret
+            MYSQL_DATABASE: todos
+volumes:
+    todo-mysql-data:
+        external: false
+```
+
+### **`Run Application stack`**
+
+Make sure no other copies are running first
