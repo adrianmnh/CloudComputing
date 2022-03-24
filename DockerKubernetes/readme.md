@@ -1,5 +1,9 @@
 # **`Docker Containerization and Kubernetes Cluster`**
 
+<img src="./img/01.png">
+
+<img src="./img/02.png">
+
 ## **`Volumes`**
 | |Named Volumes|Bind Mounts|
 |:----|:----|:----|
@@ -159,7 +163,6 @@ Migrate working directory and volume mapping using `working_dir` and `volumes`
 
 Specify `environment` variables
 
-`.\docker-compose.yml` - file with contents:
 ```yml
 version: "3.7"
 
@@ -192,12 +195,13 @@ Volume must be defined in top-level definition section **and** specified in the 
 
 Define **environment variables**
 
+<sub>`.\docker-compose.yml` - file with contents:</sub>
 ```yml
 version: "3.7"
 
 services:
     app:
-        image: todo-list:version1.2
+        image: node:12-alpine
         command: sh -c "yarn install && yarn run dev"
         ports:
             - "1234:3000"
@@ -208,7 +212,7 @@ services:
             MYSQL_HOST: mysql
             MYSQL_USER: root
             MYSQL_PASSWORD: secret
-            MYSQL_DATABASE: todos
+            MYSQL_DB: todos
     mysql:
         image: mysql:5.7
         volumes: 
@@ -223,4 +227,100 @@ volumes:
 
 ### **`Run Application stack`**
 
-Make sure no other copies are running first
+Make sure no other copies are running first.
+
+Compose the application
+
+    docker-compose up
+
+Destroy application
+
+    docker-compose down
+
+To remove application **and** volumes used in the app. May not want to do this to maintain persistent database
+
+    docker-compose down --volumes
+
+
+# **`Kubernetes`**
+
+Highly available cluster of computers connected to work as a single unit.
+
+Automates distribution and scheduling of application containers across a cluster in a more efficient way
+
+    kubectl cluster-info
+
+**Control Plane** → coordinates and **manages cluster**
+* Scheduling, maintaining desired state, scaling, roling out updates
+* exposes kubernetes API
+
+**Nodes** → are the workers that run applications
+* **contains Kubelet** → node manager and middle man for control plane
+* *should* have container runtime(Docker)
+
+<sub>**Three node minimum** for production traffic</sub>
+
+**`Deployment`**
+
+To deploy application, Control Plane starts app *containers*. Control schedules containers to run on cluster's nodes. 
+
+Nodes communicate with Control Plane using **kubernetes API**. K-API which is accessible by end users
+
+> **Minikube** - Lightweight Kubernetes implementation that creates a VM on local machine and deploys simple cluster containing 1 node
+
+    kubectl get nodes -o wide
+
+    kubectl describe nodes
+
+### **`Deployment Configuration`**
+
+Instructs Kubernetes how to create and update instances of application. 
+
+Once created, Control Plane schedules app instances included in deployment to run on individual Nodes in the cluster
+
+Created app instances are continuously monitored by **Kubernetes Deployment Controller**
+
+If a Node crashes, Controller replaces instance with another Node in the cluster, providing **self-healing** and addressing machine failure or maintenance
+
+<sub>Before orchestration tools, scripts in vms were used to start applications. Recovery from machine failure was not allowed. Kubernetes Deployments provide a * fundamentally* different approach to application management
+
+<img src=./img/k01.png width=500>
+
+*Applications need to be packaged into one of the supported container formats in order to be deployed on Kubernetes*
+
+**kubectl** → Kubernetes API → interact with cluster
+
+Deployment creation specifies the container image for application, and the number of replicas.
+
+    kubectl create deployment <name> --image=<container:image:version>
+
+    kubectl create deployment <todo-list> --image=adriannoa91/todo-list:v1
+
+    kubectl get deploy --output wide
+
+    kubectl describe deploy 
+
+    export POD_NAME=$(kubectl get pods -o go-template --template '{{range .items}}{{.metadata.name}}{{"\n"}}{{end}}')
+
+    $NODE_PORT=(kubectl get services/bootcamp -o go-template='{{(index .spec.ports 0).nodePort}}')   
+
+### **`Pods`**
+
+Upon deployment, a **Pod** that hosts app is created. 
+
+It is an *abstraction* that represents a group of one or more application containers, and shared resources
+* Volumes - storage
+* Networking - unique cluster IP address
+* Information - how to run each container. Image version and ports
+
+Pod models an application-specific **logical host** and con contain different application containers which are relatively tightly coupled.
+
+Pod might include both container with Node.js app as well as a different container that feeds the data to be publised by the Node.js webserver.
+
+Containers in a Pod share an IP Address and port space, they are co-located and co-scheduled, running in a shared context on the same Node.
+
+Pods are the atomic unit on Kubernetes platform.
+
+Deployment → creates Pods → hold Containers.
+
+<sub>Each Pod is tied to the Node where it is scheduled, and remains there until termination or deletion. In case of failure, Deployment Controller schedules identical pods on other available Nodes</sub>
