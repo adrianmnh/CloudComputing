@@ -65,11 +65,13 @@ or
     --env MYSQL_DATABASE=todos `
     mysql:5.7
 
-### **Connect to database and enter password _secret_**
+## **`Connect to database and enter password _secret_`**
 
-    docker exec -it container_id mysql -u root -p
+`docker exec -it container_id mysql -u root -p`
 
-    SHOW DATABASES;
+`SHOW DATABASES;`
+
+    docker exec 
 
 ### **Connect to MySQL**
 
@@ -292,17 +294,19 @@ If a Node crashes, Controller replaces instance with another Node in the cluster
 
 Deployment creation specifies the container image for application, and the number of replicas.
 
-    kubectl create deployment <name> --image=<container:image:version>
+```bash
+kubectl create deployment <name> --image=<container:image:version>
 
-    kubectl create deployment <todo-list> --image=adriannoa91/todo-list:v1
+kubectl create deployment <todo-list> --image=adriannoa91/todo-list:v1
 
-    kubectl get deploy --output wide
+kubectl get deploy --output wide
 
-    kubectl describe deploy 
+kubectl describe deploy 
 
-    export POD_NAME=$(kubectl get pods -o go-template --template '{{range .items}}{{.metadata.name}}{{"\n"}}{{end}}')
+export POD_NAME=$(kubectl get pods -o go-template --template '{{range .items}}{{.metadata.name}}{{"\n"}}{{end}}')
 
-    $NODE_PORT=(kubectl get services/bootcamp -o go-template='{{(index .spec.ports 0).nodePort}}')   
+$NODE_PORT=(kubectl get services/bootcamp -o go-template='{{(index .spec.ports 0).nodePort}}')   
+```
 
 ### **`Pods`**
 
@@ -321,6 +325,236 @@ Containers in a Pod share an IP Address and port space, they are co-located and 
 
 Pods are the atomic unit on Kubernetes platform.
 
-Deployment → creates Pods → hold Containers.
+**Deployment** to Node → creates Pods → hold Containers
 
 <sub>Each Pod is tied to the Node where it is scheduled, and remains there until termination or deletion. In case of failure, Deployment Controller schedules identical pods on other available Nodes</sub>
+
+<img src=img/k02.png width=80%>
+
+<sub>**Containers** should only be **scheduled together** in a **single Pod** if they are **tightly coupled** and **share resources**</sub>
+
+## **`Nodes`**
+
+Pods run on Nodes.
+
+Nodes are **worker** machines in either virtual or physical machine, depending on cluster
+
+Nodes can have **multiple** Pods.
+
+Nodes are **managed** by *Control Plane*
+
+**Control Plane automatically** handles scheduling of Pods across the Nodes in the cluster.
+
+Control Plane automatic scheduling accounts for available resources on Nodes
+
+Kubernetes Nodes run:
+* **Kubelet** - process responsible for comms. between Control Plane ⇔ Node
+* **Container runtime** - pulling images from registry, unpacking container, running app
+
+<img src=img/k03.png width=60%>
+
+**Get Pod Names**
+
+    kubectl get pod -o name
+
+**Get Pod Name from label**
+
+    kubectl get pod --label app=todo -o name
+    kubectl get pod -l app=todo -o name
+
+    $POD_NAME=(kubectl get pod -l app=todo -o jsonpath="{.items[0].metadata.name}")
+
+**List of pods by name**
+
+    $arr= -split (kubectl get pods -o go-template --template '{{range .items}} {{.metadata.name}}{{end}}')
+
+**Get pod name from array and log**
+
+    $POD_NAME=$arr[i]
+
+    kubectl logs $POD_NAME
+
+**Shell into container**
+
+    kubectl exec -ti <pod_name> -- bash
+    kubectl exec --tty --stdin $arr[0] -- bash
+
+    find . | grep FileFolderName
+
+**To grab pseudo Dockerfile from image**
+
+    $arr = docker history --no-trunc todo-list:v1
+
+    for ($i = 0 ; $i -le $arr.count-1 ; $i++) {
+        $arr[$i] = -split $arr[$i]
+        $arr[$i] = $arr[$i] -join " "
+    }
+
+    $arr
+
+Pods have a lifecycle. When a worker Node dies, so do the Pods within.
+
+ReplicaSets drives cluster back to desired state by creating new pods automatically
+
+## **`Using a Service to expose App`**
+
+A Service is an abstraction which defines a logical set of Pods and a policy by which to access them
+
+Defined using **YAML** or json. 
+
+**Pods** in a Node targeted by Service are *usually determined* by a **LabelSelector**. 
+
+```yaml
+    kind: Pod
+    metadata:
+      name: myappname
+      labels:         # key value pair label
+          app: todoapp
+
+    kind: Service
+    spec:             # applies service to any 
+      selector:       # pod or deployment with
+        app: todoapp  # same key value pair labels
+```
+
+<sub>**Service without Selector → no Endpoint**</sub>
+
+This type of service requires manual mapping of Service to specific Endpoints. 
+
+ExternalName type of Services do not specify a selector
+
+A **Pod's** unique **IP adress** are **not exposed** outside cluster **without a Service**
+
+### **`ClusterIP`**
+
+Accessible only within cluster. To test: 
+1. sh into nodejs → `kubectl exec -ti podname -- sh`
+2. install curl package → `apk --no-cache add curl`
+3. get url with either method
+   * **A** <clusterInternal-IP\>:<port\>
+   * **B** <podInternal-IP\>:<targetPort\>
+
+When **only** `port` is specified and App listens on port 3000
+
+Service port set to 80
+
+Site is only available within **pods**(any) in the cluster using **method B** on app's listening port `<podIP>:3000`
+
+```yaml
+# port assigned: 31234
+type: ClusterIP
+ports:
+- port: 80
+```
+When port is set to the app's `listening port` 3000
+
+Site is available from
+**method A** `<clusterIP>:3000` and
+**method B** `<podIP>:3000`
+
+```yaml
+# port assigned: 31234
+type: ClusterIP
+ports:
+- port: 3000
+```
+`port` refers to the **container's port**, in this case the **cluster**
+
+`targetPort` refers to the **pod's traffic port**
+
+Service `port` is set to 80(default) and `targetPort` is set to 3000
+
+Site is available from
+**method A** `<clusterIP>` and
+**method B** `<podIP>:3000`
+
+```yaml
+# port assigned: 31234
+type: ClusterIP
+ports:
+- port: 80
+  targetPort: 3000
+```
+
+### **`Load Balancer`**
+
+When **only** `port` is specified, `targetPort` is set to the same value as port
+
+Simple applications listens on port 3000, Service's port is set to 3000
+
+open app → https://localhost:3000
+```yaml
+# App listens and serves on the same port
+ports:
+  - port: 3000
+type: LoadBalancer
+```
+When **port** and **nodePort** are specified
+
+Simple app listen on port 3000, targetPort is set to 3000, port is set to 80
+
+open app → https://localhost:80 → https://localhost
+
+```yaml
+# app listens on port 3000, servers on 80(default)
+type: LoadBalancer
+ports:
+- port: 80
+  targetPort: 3000
+```
+
+### **`NodePort`**
+
+When **only** `port` is specified, a random ephemoral port is assigned to `nodePort`
+
+Simple app listen on port 3000, Service's port is set to 3000
+
+open app → https://localhost:31234
+
+```yaml
+# port assigned: 31234
+type: NodePort
+ports:
+- port: 3000
+```
+open app → https://localhost:31777
+
+```yaml
+type: NodePort
+ports:
+- port: 3000
+  nodePort: 31777
+```
+
+
+Type of Services:
+1. **LoadBalancer** → Creates an external balancer in current cloud and assigns a fixed external IP to the Service. Superset of NodePort
+2. **NodePort** → Superset of CLusterIP Exposes Service on the same port of each selected Node in the cluster using NAT. Accessible from outside cluster <NodeIP\>:<NodePort\>. 
+3. **ClusterIP** → default. Exposes the Service within cluster only
+4. **ExternalName** → Maps the service to the contents of the externalName field www.some-site.net, by returning a CNAME record with its value. No proxying required. v1.7 kube-dns required, or CoreDNS 0.0.8
+
+
+A **`Service`** routes traffic across a set of Pods specified by selector.
+
+Services are the abstraction that allows Pod replication without impacting app.
+
+**Discovery** and **routing** among dependent Pods is handled by **Services**
+
+**Services** match set of Pods using *labels* and *selectors*.
+
+Labels are key/value pairs attached to objects, used for:
+* Designate objects for dev, testing, or production
+* Embed version tags
+* Classify an object using tags
+
+**Label** can be attached at creation, or modified later on. 
+
+<img src=img/k04.png width=70%>
+
+
+## **`Updating pods and deployments: Rolling Updates`**
+
+Rolling updates allow Deployments/Pod updates to take place without *zero downtime*
+
+By default, the maximum amount of downtime pods and pods that can be created **is one(1)**
+
